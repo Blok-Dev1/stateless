@@ -125,7 +125,7 @@ class Program
         //      5	        Stoping Started	05 IMS	        First		                                0
         //      6	        Final PNL Act	06 StopingEnd	Default		                                0
 
-
+        //  Conditions
         //  SEQ     TriggerColumnName1	    TriggerColumnName2	    TriggerColumnName3	StartorEnd	InfraOrPanel
         //  0       NULL                    NULL                    NULL                NULL        NULL
         //  1       Plan Raise              RSE                     RSE                 START       Infra
@@ -137,14 +137,69 @@ class Program
 
         // Group By Riase Name!
 
+        // rule
+        var rule1 = new Rule(0);
+        rule1.Name = "N/A";
+        rule1.TargetState = "01 N/A";
+        rule1.IsMandatory = true;
+
+        var rule2 = new Rule(0);
+        rule2.Name = "Raise started";
+        rule2.TargetState = "02 NIR";
+        rule2.IsMandatory = false;
+
+        // conditions
+        var cond1 = new Condition(0);
+        cond1.Add(new Trigger{ Name = "EntityName", Value = "NULL"});
+        cond1.Add(new Trigger{ Name = "Location Activity", Value = "NULL"});
+        cond1.Add(new Trigger{ Name = "Location Type", Value = "NULL"});
+
+        var cond2 = new Condition(1);
+        cond2.Add(new Trigger{ Name = "EntityName", Value = "Plan Raise"});
+        cond2.Add(new Trigger{ Name = "Location Activity", Value = "RSE"});
+        cond2.Add(new Trigger{ Name = "Location Type", Value = "RSE"});
+
+        
+
         // Wait for user
-        Console.ReadKey();
+        Console.Read();
+    }
+
+    public class Rule
+    {
+        public enum eRuleType
+        {
+            None,
+            First,
+            Last,
+
+        }
+        public int  SequenceNo {get; }
+        public string Name {get; set;}
+        public string TargetState {get; set;}
+        public Rule(int sequenceno)
+        {
+            SequenceNo = sequenceno;
+        }
+
+        public bool IsMandatory {get; set;}
+    }
+
+    public class Condition: List<Trigger>
+    {
+        public int  SequenceNo {get; }
+
+        public Condition(int sequenceno)
+        {
+            SequenceNo = sequenceno;
+        }
+
     }
 
     public class Trigger
     {
-        public string Target { get; set; }
-        public string TargetValue { get; set; }
+        public string Name { get; set; }
+        public string Value { get; set; }
     }
 
     public class ScheduleTask
