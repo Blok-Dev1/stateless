@@ -153,7 +153,7 @@ class Program
         targetCondition.Add(new Trigger { Name = "EntityName", Value = "Plan Panel" });
         targetCondition.Name = "Stoping IMS State";
 
-        // rule
+        // source rules
         var rule0 = new Rule(0);
         rule0.Name = "N/A";
         rule0.TargetState = "01 N/A";
@@ -206,14 +206,18 @@ class Program
 
         // find Targets
         // WHERE [EntityName] = 'Plan Panel'  ... 
-        var findtarget = new Trigger { Name = "EntityName", Value = "Plan Panel" };
+        var targetrule = new Rule(0);
+        targetrule.Name = "Find Target";
+
+        var tc = new Condition(0);
+        var flttarget = new Trigger { Name = "Entity Name", Value = "Plan Panel" };
+        tc.Add(flttarget);
+        targetrule.Condition = tc;
 
 
+        // NA
         var target1 = schedule.Where(s => s.Attributes.ContainsKey("Entity Name"));
         var target2 = schedule.Where(x => x.Attributes["Entity Name"] == "Plan Panel");
-        //var source = schedule.Where(x=> x.Attributes["Entity Name"] = Plan Raise AND[Location Activity] = RSE AND[Location Type] = RSE)
-
-
         var qry = TextFilter(schedule.AsQueryable(), "Panel_L1").ToList();
 
         // Define the dynamic query expression
@@ -237,6 +241,19 @@ class Program
         // ALL --- WHERE [Entity Name] = NULL AND [Location Activity] = NULL AND [Location Type] = NULL
         // WHERE [Entity Name] = Plan Raise AND [Location Activity] = RSE AND [Location Type] = RSE
 
+        expression = "x => x.Attributes[\"{0}\"] == \"{1}\" ";
+
+        // Generate Target filter
+        var filter = "";
+        foreach (var c in targetrule.Condition)
+        {
+            filter += string.Format(expression, c.Name, c.Value);
+
+            if (targetrule.Condition.Last() != c)
+                filter += " && ";
+        }
+
+        var targets = schedule.AsQueryable().Where(filter).ToList();
         // Period Count 5
         for (int i = 0; i < 5; i++)
         {
