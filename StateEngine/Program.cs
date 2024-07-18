@@ -10,6 +10,8 @@ using System;
 using System.Linq.Dynamic.Core;
 using System.Diagnostics;
 using System.Xml.Linq;
+using System.Reflection.Metadata;
+using System.Data.Common;
 
 namespace StateEngine;
 
@@ -254,6 +256,23 @@ class Program
         }
 
         var targets = schedule.AsQueryable().Where(filter).ToList();
+
+        TestDictionaryAccess();
+
+        var filters = new Dictionary<string, object>();
+        filters.Add("Name", "Panel_R1");
+
+        var findPanelTask = CreateEqualExpression(filters);
+        var panles = schedule.AsQueryable().Where(findPanelTask)
+            .ToList();
+
+
+        //var findkeyVlaues = FindKeyValuesExpression("Entity Name", "Plan Panel");
+        //var onEntityName = panel_l1.Attributes.AsQueryable().Where(findkeyVlaues)
+        //    .ToList();
+
+        TryDict(panel_l1);
+
         // Period Count 5
         for (int i = 0; i < 5; i++)
         {
@@ -261,6 +280,152 @@ class Program
         }
         // Wait for user
         Console.Read();
+    }
+
+    //https://code-maze.com/dynamic-queries-expression-trees-csharp/#:~:text=In%20C%23%2C%20dynamic%20queries%20refer,or%20can%20be%20dynamically%20changed.
+    private static void TryDict(ScheduleTask panel_l1)
+    {
+        //var param = Expression.Parameter(typeof(ScheduleTask));
+        //var left = MemberExpression.Property(param, "Bar[\"entryName\"]");
+        //var property = Expression.Property(parameter, typeof(Program).GetProperty("x"));
+        //var itemAtPosition0 = Expression.MakeIndex(property, typeof(List<string>).GetProperty("Item"),
+        //                     new[] { Expression.Constant(0) });
+
+//        var expr =
+//    Expression.Lambda<Func<Program, string>>(
+//        Expression.MakeIndex(
+//        Expression.Property(
+//                    parameter,
+//                    typeof(Program).GetProperty("x")),
+//                typeof(List<string>).GetProperty("Item"),
+//                new[] { Expression.Constant(0) }),
+//        parameter);
+//        --And here's how to invoke the expression:
+
+//var instance = new ProgramZ { x = new List<string> { "a", "b" } };
+
+      //  Console.WriteLine(expr.Compile().Invoke(instance));
+
+        var param = Expression.Parameter(typeof(ScheduleTask));
+        var bar = MemberExpression.Property(param, "Attributes");
+
+        Type dictionaryType = typeof(ScheduleTask).GetProperty("Attributes").PropertyType;
+        PropertyInfo indexerProp = dictionaryType.GetProperty("Item");
+
+        var dictKeyConstant = Expression.Constant("entryName");
+        var dictAccess = Expression.MakeIndex(bar, indexerProp, new[] { dictKeyConstant });
+
+        var propertyType = indexerProp.PropertyType;
+        //var d = Convert.ChangeType("newValue", propertyType);
+        var right = Expression.Constant(propertyType);
+        var expression = Expression.MakeBinary(ExpressionType.Equal, dictAccess, right);
+    }
+
+    static void TestDictionaryAccess()
+    {
+        //ParameterExpression valueBag = Expression.Parameter(typeof(Dictionary<string, object>), "valueBag");
+        //ParameterExpression key = Expression.Parameter(typeof(string), "key");
+        //ParameterExpression result = Expression.Parameter(typeof(object), "result");
+        //BlockExpression block = Expression.Block(
+        //    new[] { result },               //make the result a variable in scope for the block
+        //    Expression.Assign(result, key), //How do I assign the Dictionary item to the result ??????
+        //    result                          //last value Expression becomes the return of the block
+        //);
+
+        ParameterExpression valueBag = Expression.Parameter(typeof(Dictionary<string, object>), "valueBag");
+
+        ParameterExpression key = Expression.Parameter(typeof(string), "key");
+        ParameterExpression result = Expression.Parameter(typeof(object), "result");
+        BlockExpression block = Expression.Block(new[] { result },   //make the result a variable in scope for the block           
+          Expression.Assign(result, Expression.Property(valueBag, "Item", key)),
+          result   //last value Expression becomes the return of the block 
+        );
+
+        // Lambda Expression taking a Dictionary and a String as parameters and returning an object
+        Func<Dictionary<string, object>, string, object> myCompiledRule = (Func<Dictionary<string, object>, string, object>)Expression.Lambda(block, valueBag, key).Compile();
+
+        //-------------- invoke the Lambda Expression ----------------
+        Dictionary<string, object> testBag = new Dictionary<string, object>();
+        testBag.Add("one", 42);  //Add one item to the Dictionary
+        Console.WriteLine(myCompiledRule.DynamicInvoke(testBag, "one")); // I want this to print 42
+    }
+
+    public static Expression<Func<KeyValuePair<string, string>, bool>> FindKeyValuesExpression(string Key, string value)
+    {
+        var param = Expression.Parameter(typeof(Dictionary<string, string>), "p");
+
+        //Expression? body = null;
+
+        //foreach (var pair in filters)
+        //{
+        //    var member = Expression.Property(param, pair.Key);
+        //    var constant = Expression.Constant(pair.Value);
+        //    var expression = Expression.Equal(member, constant);
+        //    body = body == null ? expression : Expression.AndAlso(body, expression);
+        //}
+
+        ParameterExpression key = Expression.Parameter(typeof(string), "key");
+        ParameterExpression result = Expression.Parameter(typeof(string), "result");
+
+        //BlockExpression body = Expression.Block(new[] { result },   //make the result a variable in scope for the block           
+        // Expression.Assign(result, Expression.Property(param, "Item", key)),
+        // result   //last value Expression becomes the return of the block );
+
+        //var body = Expression.Equals(key, result);
+
+        //var b = Expression.Equals(Key, );
+
+        var member = Expression.Property(param, "Item", key);
+        var constant = Expression.Constant(Key);
+        var expression = Expression.Equal(member, constant);
+
+        //var e = Expression.Block(new[] { result }, , result);
+
+        //var b = Expression.Block(new[] { result }, )
+
+        return null;
+        //return Expression.Lambda<Func<KeyValuePair<string, string>, bool>>(body, param);
+    }
+
+    //expression = CreateNestedExpression("Address.Country", "USA"); // Address.Country == "USA"
+    //query = persons.Where(expression).ToQueryString();
+    public static Expression<Func<ScheduleTask, bool>> CreateNestedExpression(string propertyName, object value)
+    {
+        var param = Expression.Parameter(typeof(ScheduleTask), "p");
+
+        Expression member = param;
+
+        foreach (var namePart in propertyName.Split('.'))
+        {
+            member = Expression.Property(member, namePart);
+        }
+
+        var constant = Expression.Constant(value);
+
+        var body = Expression.Equal(member, constant);
+
+        return Expression.Lambda<Func<ScheduleTask, bool>>(body, param);
+    }
+
+    
+    // var filters = new Dictionary<string, object>();
+    // filters.Add("FirstName", "Manoel");
+    // filters.Add("LastName", "Nobrega");
+    // expression = CreateEqualExpression(filters);
+    // query = persons.Where(expression).ToQueryString();
+   
+    public static Expression<Func<ScheduleTask, bool>> CreateEqualExpression(IDictionary<string, object> filters)
+    {
+        var param = Expression.Parameter(typeof(ScheduleTask), "p");
+        Expression? body = null;
+        foreach (var pair in filters)
+        {
+            var member = Expression.Property(param, pair.Key);
+            var constant = Expression.Constant(pair.Value);
+            var expression = Expression.Equal(member, constant);
+            body = body == null ? expression : Expression.AndAlso(body, expression);
+        }
+        return Expression.Lambda<Func<ScheduleTask, bool>>(body, param);
     }
 
     // using static System.Linq.Expressions.Expression;
