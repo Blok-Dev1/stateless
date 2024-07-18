@@ -12,6 +12,8 @@ using System.Diagnostics;
 using System.Xml.Linq;
 using System.Reflection.Metadata;
 using System.Data.Common;
+using System.Security.Cryptography.X509Certificates;
+using System.Runtime.CompilerServices;
 
 namespace StateEngine;
 
@@ -180,28 +182,28 @@ class Program
 
         // conditions
         var cond0 = new Condition(0);
-        cond0.Add(new Trigger{ Name = "EntityName", Value = "NULL"});
+        cond0.Add(new Trigger{ Name = en, Value = "NULL"});
         cond0.Add(new Trigger{ Name = "Location Activity", Value = "NULL"});
         cond0.Add(new Trigger{ Name = "Location Type", Value = "NULL"});
         rule0.Condition = cond0;
 
         var cond1 = new Condition(1);
         cond1.ConditionType = Condition.eExecutedAt.Start;
-        cond1.Add(new Trigger{ Name = "EntityName", Value = "Plan Raise"});
+        cond1.Add(new Trigger{ Name = en, Value = "Plan Raise"});
         cond1.Add(new Trigger{ Name = "Location Activity", Value = "RSE"});
         cond1.Add(new Trigger{ Name = "Location Type", Value = "RSE"});
         rule1.Condition = cond1;
 
         var cond2 = new Condition(2);
         cond2.ConditionType = Condition.eExecutedAt.End;
-        cond2.Add(new Trigger { Name = "EntityName", Value = "Plan Raise" });
+        cond2.Add(new Trigger { Name = en, Value = "Plan Raise" });
         cond2.Add(new Trigger { Name = "Location Activity", Value = "RSE" });
         cond2.Add(new Trigger { Name = "Location Type", Value = "RSE" });
         rule2.Condition = cond2;
 
         var cond3 = new Condition(3);
         cond3.ConditionType = Condition.eExecutedAt.Start;
-        cond3.Add(new Trigger { Name = "EntityName", Value = "NULL" });
+        cond3.Add(new Trigger { Name = en, Value = "NULL" });
         cond3.Add(new Trigger { Name = "Location Activity", Value = "LED" });
         cond3.Add(new Trigger { Name = "Location Type", Value = "NULL" });
         rule3.Condition = cond3;
@@ -242,35 +244,41 @@ class Program
         // check rule
         // ALL --- WHERE [Entity Name] = NULL AND [Location Activity] = NULL AND [Location Type] = NULL
         // WHERE [Entity Name] = Plan Raise AND [Location Activity] = RSE AND [Location Type] = RSE
+        //expression = "x => x.Attributes[\"{0}\"] == \"{1}\" ";
+        //// Generate Target filter
+        //var filter = "";
+        //foreach (var c in targetrule.Condition)
+        //{
+        //    filter += string.Format(expression, c.Name, c.Value);
 
-        expression = "x => x.Attributes[\"{0}\"] == \"{1}\" ";
+        //    if (targetrule.Condition.Last() != c)
+        //        filter += " && ";
+        //}
+        //var targets = schedule.AsQueryable().Where(filter).ToList();
 
-        // Generate Target filter
-        var filter = "";
-        foreach (var c in targetrule.Condition)
-        {
-            filter += string.Format(expression, c.Name, c.Value);
+       
 
-            if (targetrule.Condition.Last() != c)
-                filter += " && ";
-        }
+        var filterso = new Dictionary<string, object>();
+        filterso.Add("Name", "Panel_R1");
 
-        var targets = schedule.AsQueryable().Where(filter).ToList();
-
-        TestDictionaryAccess();
-
-        var filters = new Dictionary<string, object>();
-        filters.Add("Name", "Panel_R1");
-
-        var findPanelTask = CreateEqualExpression(filters);
+        var findPanelTask = CreateEqualExpression(filterso);
         var panles = schedule.AsQueryable().Where(findPanelTask)
             .ToList();
+
+        //  WHERE [Entity Name] = Plan Raise AND [Location Activity] = RSE AND [Location Type] = RSE
+        var cond = new Condition(1);
+        cond.Add(new Trigger { Name = "Location Type", Value = "RSE" });
+        cond.Add(new Trigger { Name = en, Value = "Plan Raise" });
+        cond.Add(new Trigger { Name = "Location Activity", Value = "RSE" });
+        
+        var rse = FindAll(schedule, cond);
 
 
         //var findkeyVlaues = FindKeyValuesExpression("Entity Name", "Plan Panel");
         //var onEntityName = panel_l1.Attributes.AsQueryable().Where(findkeyVlaues)
         //    .ToList();
 
+        TestDictionaryAccess();
         TryDict(panel_l1);
 
         // Period Count 5
@@ -282,6 +290,47 @@ class Program
         Console.Read();
     }
 
+    private static List<ScheduleTask> FindAll(List<ScheduleTask> schedule, Condition condition)
+    {
+        var filters = condition.ToDictionary(c => c.Name, c => c.Value);
+
+        var qryResult = new List<ScheduleTask>();
+
+        foreach (var scheduletask in schedule)
+        {
+            var attributes = scheduletask.Attributes;
+
+            bool found = false;
+
+            foreach (var f in filters)
+            {
+                if (attributes.TryGetValue(f.Key, out string attributeValue))
+                {
+                    if (attributeValue != f.Value)
+                    {
+                        found = false;
+
+                        break;
+                    }
+
+                    found = true;
+                }
+                else
+                {
+                    found = false;
+
+                    break;
+                }
+            }
+
+            if (found)
+                qryResult.Add(scheduletask);
+
+        }
+
+        return qryResult;
+    }
+
     //https://code-maze.com/dynamic-queries-expression-trees-csharp/#:~:text=In%20C%23%2C%20dynamic%20queries%20refer,or%20can%20be%20dynamically%20changed.
     private static void TryDict(ScheduleTask panel_l1)
     {
@@ -291,34 +340,165 @@ class Program
         //var itemAtPosition0 = Expression.MakeIndex(property, typeof(List<string>).GetProperty("Item"),
         //                     new[] { Expression.Constant(0) });
 
-//        var expr =
-//    Expression.Lambda<Func<Program, string>>(
-//        Expression.MakeIndex(
-//        Expression.Property(
-//                    parameter,
-//                    typeof(Program).GetProperty("x")),
-//                typeof(List<string>).GetProperty("Item"),
-//                new[] { Expression.Constant(0) }),
-//        parameter);
-//        --And here's how to invoke the expression:
+        //        var expr =
+        //    Expression.Lambda<Func<Program, string>>(
+        //        Expression.MakeIndex(
+        //        Expression.Property(
+        //                    parameter,
+        //                    typeof(Program).GetProperty("x")),
+        //                typeof(List<string>).GetProperty("Item"),
+        //                new[] { Expression.Constant(0) }),
+        //        parameter);
+        //        --And here's how to invoke the expression:
 
-//var instance = new ProgramZ { x = new List<string> { "a", "b" } };
+        //var instance = new ProgramZ { x = new List<string> { "a", "b" } };
 
-      //  Console.WriteLine(expr.Compile().Invoke(instance));
+        //  Console.WriteLine(expr.Compile().Invoke(instance));
 
-        var param = Expression.Parameter(typeof(ScheduleTask));
-        var bar = MemberExpression.Property(param, "Attributes");
+        //var param = Expression.Parameter(typeof(ScheduleTask));
+        //var bar = MemberExpression.Property(param, "Attributes");
 
-        Type dictionaryType = typeof(ScheduleTask).GetProperty("Attributes").PropertyType;
-        PropertyInfo indexerProp = dictionaryType.GetProperty("Item");
+        //Type dictionaryType = typeof(ScheduleTask).GetProperty("Attributes").PropertyType;
+        //PropertyInfo indexerProp = dictionaryType.GetProperty("Item");
 
-        var dictKeyConstant = Expression.Constant("entryName");
-        var dictAccess = Expression.MakeIndex(bar, indexerProp, new[] { dictKeyConstant });
+        //var dictKeyConstant = Expression.Constant("entryName");
+        //var dictAccess = Expression.MakeIndex(bar, indexerProp, new[] { dictKeyConstant });
 
-        var propertyType = indexerProp.PropertyType;
-        //var d = Convert.ChangeType("newValue", propertyType);
-        var right = Expression.Constant(propertyType);
-        var expression = Expression.MakeBinary(ExpressionType.Equal, dictAccess, right);
+        //var propertyType = indexerProp.PropertyType;
+        ////var d = Convert.ChangeType("newValue", propertyType);
+        //var right = Expression.Constant(propertyType);
+        //var expression = Expression.MakeBinary(ExpressionType.Equal, dictAccess, right);
+
+        //var param = Expression.Parameter(typeof(Person), "p");
+        //var member = Expression.Property(param, propertyName);
+        //var constant = Expression.Constant(value);
+        //var body = Expression.Equal(member, constant);
+        //return Expression.Lambda<Func<Person, bool>>(body, param);
+
+        //ParameterExpression attr = Expression.Parameter(typeof(Dictionary<string, string>), "attr");
+        //ParameterExpression key = Expression.Parameter(typeof(string), "key");
+        //ParameterExpression result = Expression.Parameter(typeof(string), "result");
+        //var member = Expression.Property(attr, "Item", key);
+        //var constant = Expression.Constant("Entity Name");
+
+        //var param = Expression.Parameter(typeof(Foo));
+        //var bar = MemberExpression.Property(param, "Bar");
+
+        //Type dictionaryType = typeof(Foo).GetProperty("Bar").PropertyType;
+        //PropertyInfo indexerProp = dictionaryType.GetProperty("Item");
+        //var dictKeyConstant = Expression.Constant("entryName");
+        //var dictAccess = Expression.MakeIndex(bar, indexerProp, new[] { dictKeyConstant });
+
+        //var propertyType = indexerProp.PropertyType;
+        //var right = Expression.Constant(Convert.ChangeType("newValue", propertyType));
+        //var expression = Expression.MakeBinary(ExpressionType.Equal, dictAccess, right);
+
+        ParameterExpression dictExpr = Expression.Parameter(typeof(Dictionary<string, string>));
+        ParameterExpression keyExpr = Expression.Parameter(typeof(string));
+        ParameterExpression valueExpr = Expression.Parameter(typeof(string));
+
+        // Simple and direct. Should normally be enough
+        PropertyInfo indexer = dictExpr.Type.GetProperty("Item");
+
+        // Alternative, note that we could even look for the type of parameters, if there are indexer overloads.
+        //PropertyInfo indexer = (from p in dictExpr.Type.GetDefaultMembers().OfType<PropertyInfo>()
+        //                            // This check is probably useless. You can't overload on return value in C#.
+        //                        where p.PropertyType == typeof(int)
+        //                        let q = p.GetIndexParameters()
+        //                        // Here we can search for the exact overload. Length is the number of "parameters" of the indexer, and then we can check for their type.
+        //                        where q.Length == 1 && q[0].ParameterType == typeof(string)
+        //                        select p).Single();
+
+        IndexExpression indexExpr = Expression.Property(dictExpr, indexer, keyExpr);
+
+        BinaryExpression assign = Expression.Assign(indexExpr, valueExpr);
+
+        var lambdaSetter = Expression.Lambda<Action<Dictionary<string, string>, string, string>>(assign, dictExpr, keyExpr, valueExpr);
+        var lambdaGetter = Expression.Lambda<Func<Dictionary<string, string>, string, string>>(indexExpr, dictExpr, keyExpr);
+
+        var setter = lambdaSetter.Compile();
+        var getter = lambdaGetter.Compile();
+
+        var dict = new Dictionary<string, string>();
+        setter(dict, "MyKey1", "MyVal1");
+        var value = getter(dict, "MyKey1");
+        dict.Add("MyKey2", "MyVal2");
+        dict.Add("MyKey3", "MyVal3");
+        dict.Add("MyKey4", "MyVal4");
+
+        Func<Dictionary<string, string>,bool> allfilts =  filts =>
+        {
+            bool yes = false;
+
+            foreach (var kvp in filts)
+            {
+                if (dict.ContainsKey(kvp.Key))
+                {
+                    yes = getter(dict, kvp.Key) == kvp.Value;
+
+                    if (!yes)
+                        return false;
+                }
+                else
+                    return false;
+            }
+
+            return yes;
+        };
+        
+        var f = new Dictionary<string, string>();
+        f.Add("MyKey2", "MyVal2");
+        f.Add("MyKey5", "MyVal5");
+
+        var bb = allfilts(f);
+        //value = getter(dict, "MyKey1");
+
+        //var constant = Expression.Constant("MyKey");
+        //var member = Expression.Assign(keyExpr, constant);
+        //var val = Expression.Constant(2);
+        //var body = Expression.Equal(member, val);
+        //var list = Enumerable.Range(0, 5000).ToList();
+        //var idx = list.GetType().GetProperty("Item");
+        //int id = 2;
+        //var index = Expression.MakeIndex(Expression.Constant(list), idx, new[] { Expression.Constant(2) });
+        //var lb = Expression.Lambda<Func<List<int>, int, bool>>(index);
+        //list.Where(lb)
+
+
+        var list = Enumerable.Range(2, 5000).ToList();
+
+        var param = Expression.Parameter(typeof(List<int>), "p");
+        var k = Expression.Parameter(typeof(int));
+
+        var itemAtPosition0 = Expression.MakeIndex(Expression.Constant(list), typeof(List<int>).GetProperty("Item"),
+                     new[] { Expression.Constant(0) });
+        
+        var lb = Expression.Lambda<Func<int, int>>(itemAtPosition0, k).Compile();
+        var h = lb(3);
+       
+
+        var dictKeyConstant = Expression.Constant("MyKey");
+        var dictAccess = Expression.MakeIndex(Expression.Constant(dict), indexer, new[] { dictKeyConstant });
+
+        var propertyType = indexer.PropertyType;
+        ////var d = Convert.ChangeType("newValue", propertyType);
+        //var right = Expression.Constant(propertyType);
+        //var expression = Expression.MakeBinary(ExpressionType.Equal, dictAccess, right);
+
+        //var propertyType = indexerProp.PropertyType;
+        ////var d = Convert.ChangeType("newValue", propertyType);
+        //var right = Expression.Constant(propertyType);
+        //var expression = Expression.MakeBinary(ExpressionType.Equal, dictAccess, right);
+
+        ///var itemAtPosition0 = Expression.MakeIndex(property, typeof(List<string>).GetProperty("Item"),
+        ///                     new[] { Expression.Constant(0) });
+
+        //var keyvalueExp = Expression.Lambda<Func<KeyValuePair<string, int>, bool>>(body, dictExpr);
+        //var get1 = Expression.Lambda<Func<Dictionary<string, int>, string, int>>(indexExpr, dictExpr, keyExpr);
+
+      
+        // MyKey eq 2 and MyOtherKey eq 3
+        //var kvp = dict.AsQueryable().Where(keyvalueExp).ToArray();
     }
 
     static void TestDictionaryAccess()
