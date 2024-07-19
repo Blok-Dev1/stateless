@@ -218,10 +218,27 @@ class Program
         tc.Add(flttarget);
         targetrule.Condition = tc;
 
+        //  WHERE [Entity Name] = Plan Raise AND [Location Activity] = RSE AND [Location Type] = RSE
+        var cond = new Condition(1);
+        cond.Add(new Trigger { Name = "Location Type", Value = "RSE" });
+        cond.Add(new Trigger { Name = en, Value = "Plan Raise" });
+        cond.Add(new Trigger { Name = "Location Activity", Value = "RSE" });
+
+        var rse = FindAll(schedule, cond);
+
+        var targets = FindAll(schedule, tc);
+
+        // Period Count 5
+        for (int i = 0; i < 5; i++)
+        {
+            var perperiod = new Condition(1);
+            perperiod.Add(new Trigger { Name = period, Value = i.ToString() });
+
+            var tasks = FindAll(schedule, perperiod);
+        }
+
 
         // NA
-        var target1 = schedule.Where(s => s.Attributes.ContainsKey("Entity Name"));
-        var target2 = schedule.Where(x => x.Attributes["Entity Name"] == "Plan Panel");
         var qry = TextFilter(schedule.AsQueryable(), "Panel_L1").ToList();
 
         // Define the dynamic query expression
@@ -265,14 +282,7 @@ class Program
         var panles = schedule.AsQueryable().Where(findPanelTask)
             .ToList();
 
-        //  WHERE [Entity Name] = Plan Raise AND [Location Activity] = RSE AND [Location Type] = RSE
-        var cond = new Condition(1);
-        cond.Add(new Trigger { Name = "Location Type", Value = "RSE" });
-        cond.Add(new Trigger { Name = en, Value = "Plan Raise" });
-        cond.Add(new Trigger { Name = "Location Activity", Value = "RSE" });
         
-        var rse = FindAll(schedule, cond);
-
 
         //var findkeyVlaues = FindKeyValuesExpression("Entity Name", "Plan Panel");
         //var onEntityName = panel_l1.Attributes.AsQueryable().Where(findkeyVlaues)
@@ -281,11 +291,7 @@ class Program
         TestDictionaryAccess();
         TryDict(panel_l1);
 
-        // Period Count 5
-        for (int i = 0; i < 5; i++)
-        {
-
-        }
+        
         // Wait for user
         Console.Read();
     }
